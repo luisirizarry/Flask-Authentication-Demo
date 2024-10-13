@@ -1,6 +1,6 @@
 from flask import Flask, render_template, redirect, session, flash
 from flask_debugtoolbar import DebugToolbarExtension
-from models import connect_db, db, User
+from models import connect_db, db, User, Tweet
 from forms import UserForm, TweetForm
 from sqlalchemy.exc import IntegrityError
 
@@ -31,19 +31,48 @@ def register_user():
         new_user = User.register(username, password)
 
         db.session.add(new_user)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            form.username.errors.append('Username taken. Please pick another')
+            return render_template('register.html', form=form)
         db.session.commit()
         session['user_id'] = new_user.id
-        flash('Welcome! Successfully Created Your Account!')
+        flash('Welcome! Successfully Created Your Account!', 'success')
         return redirect('/tweets')
     
     return render_template('register.html', form=form)
 
-@app.route('/tweets')
+@app.route('/tweets', methods=["GET", "POST"])
 def show_tweets():
     if "user_id" not in session:
-        flash("Please login first!")
+        flash("Please login first!", "danger")
         return redirect('/')
-    return render_template('tweets.html')
+    form = TweetForm()
+    all_tweets = Tweet.query.all()
+    if form.validate_on_submit():
+        text = form.text.data
+        new_tweet = Tweet(text=text, user_id=session['user_id'])
+        db.session.add(new_tweet)
+        db.session.commit()
+        flash('Tweet Created!', 'success')
+        return redirect('/tweets')
+    
+    return render_template('tweets.html', form=form, tweets=all_tweets)
+
+@app.route('/tweets/<int:tweet_id>', methods=["POST"])
+def delete_tweet(tweet_id):
+    if "user_id" not in session:
+        flash("Please login first!", "danger")
+        return redirect('/')
+    tweet = Tweet.query.get_or_404(tweet_id)
+    if tweet.user_id == session['user_id']:
+        db.session.delete(tweet)
+        db.session.commit()
+        flash('Tweet Deleted!', 'info')
+        return redirect('/tweets')
+    flash('You do not have permission to do that!', 'danger')
+    return redirect('/tweets')
 
 @app.route('/login', methods=["GET", "POST"])
 def login_user():
@@ -56,7 +85,7 @@ def login_user():
         user = User.authenticate(username, password)
 
         if user:
-            flash(f"Welcome Back, {user.username}!")
+            flash(f"Welcome Back, {user.username}!", "primary")
             session['user_id'] = user.id
             return redirect('/tweets')
         else:
@@ -67,5 +96,5 @@ def login_user():
 @app.route('/logout')
 def logout_user():
     session.pop('user_id')
-    flash('Goodbye!')
+    flash('Goodbye!', 'info')
     return redirect('/')

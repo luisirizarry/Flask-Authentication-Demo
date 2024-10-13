@@ -12,6 +12,16 @@ def connect_db(app):
     db.app = app
     db.init_app(app)
 
+class Tweet(db.Model):
+    """Model for tweets"""
+    __tablename__ = 'tweets'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    text = db.Column(db.Text, nullable=False)
+    # date_created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+
+    user = db.relationship('User', backref='tweets')
 
 class User(db.Model):
     """Model for Users."""
